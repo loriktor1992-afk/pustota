@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VOID Clone</title>
+  <style>
+    body { margin:0; background:#000; overflow:hidden; touch-action:none; }
+    canvas { display:block; }
+    #connect { position:fixed; top:20px; left:50%; transform:translateX(-50%); z-index:10; padding:15px 30px; background:#00ff99; color:black; border:none; border-radius:50px; font-weight:bold; font-size:20px; }
+  </style>
+</head>
+<body>
+  <button id="connect">Подключить TON кошелёк</button>
+  <canvas id="game"></canvas>
+
+  <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let player = { x: canvas.width/2, y: canvas.height/2, r: 40, color: '#00ff99' };
+
+    // TON Connect
+    const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
+      manifestUrl: 'https://raw.githubusercontent.com/ton-community/tutorials/main/03-client/test/public/tonconnect-manifest.json',
+      buttonRootId: 'connect'
+    });
+
+    // Движение за пальцем
+    canvas.addEventListener('pointermove', e => {
+      player.x = e.clientX;
+      player.y = e.clientY;
+    });
+
+    // Анимация
+    function loop() {
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, player.r, 0, Math.PI*2);
+      ctx.fillStyle = player.color;
+      ctx.fill();
+      
+      requestAnimationFrame(loop);
+    }
+    loop();
+  </script>
+</body>
+</html>
