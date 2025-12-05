@@ -1,57 +1,95 @@
-const WebSocket = require('ws');
-const http = require('http');
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PUSTOTA</title>
+  <style>
+    body { margin:0; background:#000; overflow:hidden; touch-action:none; font-family:sans-serif; }
+    canvas { display:block; }
+    #ui { position:absolute; top:10px; left:10px; color:white; z-index:10; font-size:18px; }
+    #connect { padding:12px 20px; background:#00ff99; color:black; border:none; border-radius:30px; font-weight:bold; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <button id="connect">Подключить TON</button><br>
+    <span id="status">Загрузка...</span><br>
+    Размер: <span id="size">50</span>
+  </div>
+  <canvas id="game"></canvas>
 
-const server = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('PUSTOTA Server Running!');
-});
+  <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 
-const wss = new WebSocket.Server({ server });
+    let players = {};
+    let myId = null;
+    let mySize = 50;
 
-let players = {};
-
-wss.on('connection', ws => {
-  const id = Math.random().toString(36).substr(2, 9);
-  players[id] = { x: Math.random() * 800 + 100, y: Math.random() * 600 + 100, size: 50, name: 'Player' };
-  
-  ws.send(JSON.stringify({ type: 'init', id }));
-
-  ws.on('message', data => {
-    try {
-      const msg = JSON.parse(data);
-      if (msg.type === 'move' && players[id]) {
-        players[id].x = Math.max(50, Math.min(window.innerWidth - 50, msg.x));
-        players[id].y = Math.max(50, Math.min(window.innerHeight - 50, msg.y));
-      }
-    } catch(e) {}
-  });
-
-  ws.on('close', () => delete players[id]);
-});
-
-setInterval(() => {
-  // Простая логика еды: большие едят маленьких
-  Object.keys(players).forEach(id1 => {
-    Object.keys(players).forEach(id2 => {
-      if (id1 !== id2) {
-        const p1 = players[id1];
-        const p2 = players[id2];
-        const dist = Math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2);
-        if (dist < p1.size + p2.size && p1.size > p2.size * 1.1) {
-          p1.size += p2.size * 0.5;
-          delete players[id2];
-        }
-      }
+    const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
+      manifestUrl: 'https://loriktor1992-afk.github.io/pustota/manifest.json',
+      buttonRootId: 'connect'
     });
-  });
 
-  wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: 'update', players }));
+    // WebSocket сервер (бесплатный публичный для теста)
+    const ws = new WebSocket('wss://void-server.onrender.com');
+
+    ws.onopen = () => {
+      document.getElementById('status').textContent = "В бою!";
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      
+      if (data.type === 'init') {
+        myId = data.id;
+      }
+
+      if (data.type === 'update') {
+        players = data.players;
+        if (players[myId]) mySize = players[myId].size;
+        document.getElementById('size').textContent = Math.floor(mySize);
+      }
+    };
+
+    // Отправляем позицию
+    canvas.addEventListener('pointermove', e => {
+      if (!myId) return;
+      ws.send(JSON.stringify({
+        type: 'move',
+        x: e.clientX,
+        y: e.clientY
+      }));
+    });
+
+    // Анимация
+    function loop() {
+      ctx.fillStyle = 'rgba(0,0,0,0.1)';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+
+      Object.values(players).forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+        ctx.fillStyle = p.id === myId ? '#00ff99' : '#ff3366';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Никнейм
+        ctx.fillStyle = 'white';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.name || 'Player', p.x, p.y + p.size + 20);
+      });
+
+      requestAnimationFrame(loop);
     }
-  });
-}, 100);  // 10 FPS для PvP
-
-server.listen(process.env.PORT || 8080, () => {
-  console.log('PUSTOTA SERVER RUNNING on port ' + (process.env.PORT || 8080));
-});
+    loop();
+  </script>
+</body>
+</html>
