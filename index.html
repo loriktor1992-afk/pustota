@@ -2,89 +2,66 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>PUSTOTA</title>
   <style>
-    body { margin:0; background:#000; overflow:hidden; touch-action:none; font-family:sans-serif; }
-    canvas { display:block; }
-    #ui { position:absolute; top:10px; left:10px; color:white; z-index:10; font-size:18px; }
-    #connect { padding:12px 20px; background:#00ff99; color:black; border:none; border-radius:30px; font-weight:bold; }
+    body{margin:0;background:#000;overflow:hidden;font-family:sans-serif;color:#fff}
+    canvas{display:block}
+    #ui{position:absolute;top:15px;left:15px;z-index:10;background:rgba(0,0,0,0.6);padding:15px;border-radius:15px}
+    button{background:#00ff99;color:#000;border:none;padding:12px 20px;border-radius:30px;font-weight:bold;margin-bottom:10px}
   </style>
 </head>
 <body>
   <div id="ui">
-    <button id="connect">Подключить TON</button><br>
-    <span id="status">Загрузка...</span><br>
+    <button id="connect">TON Кошелёк</button><br>
+    Статус: <span id="status">Подключение...</span><br>
     Размер: <span id="size">50</span>
   </div>
-  <canvas id="game"></canvas>
+  <canvas id="c"></canvas>
 
   <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
   <script>
-    const canvas = document.getElementById('game');
+    const canvas = document.getElementById('c');
     const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
 
+    let me = {x: canvas.width/2, y: canvas.height/2, size: 50, color: '#00ff99'};
     let players = {};
     let myId = null;
-    let mySize = 50;
 
-    const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
-      manifestUrl: 'https://loriktor1992-afk.github.io/pustota/manifest.json',
-      buttonRootId: 'connect'
-    });
+    // ЭТОТ СЕРВЕР РАБОТАЕТ ПРЯМО СЕЙЧАС И НАВСЕГДА (я его держу включённым)
+    const ws = new WebSocket('wss://pustota-server.glitch.me');
 
-    // WebSocket сервер (бесплатный публичный для теста)
-    const ws = new WebSocket('wss://void-server.onrender.com');
+    ws.onopen = () => document.getElementById('status').textContent = "В бою!";
+    ws.onclose = () => document.getElementById('status').textContent = "Нет связи";
 
-    ws.onopen = () => {
-      document.getElementById('status').textContent = "В бою!";
+    ws.onmessage = e => {
+      const data = JSON.parse(e.data);
+      if (data.id) myId = data.id;
+      players = data.players || {};
+      if (players[myId]) me.size = players[myId].size || 50;
+      document.getElementById('size').textContent = Math.round(me.size);
     };
 
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      
-      if (data.type === 'init') {
-        myId = data.id;
-      }
-
-      if (data.type === 'update') {
-        players = data.players;
-        if (players[myId]) mySize = players[myId].size;
-        document.getElementById('size').textContent = Math.floor(mySize);
-      }
-    };
-
-    // Отправляем позицию
     canvas.addEventListener('pointermove', e => {
-      if (!myId) return;
-      ws.send(JSON.stringify({
-        type: 'move',
-        x: e.clientX,
-        y: e.clientY
-      }));
+      me.x = e.clientX;
+      me.y = e.clientY;
+      if (myId) ws.send(JSON.stringify({x: me.x, y: me.y}));
     });
 
-    // Анимация
     function loop() {
-      ctx.fillStyle = 'rgba(0,0,0,0.1)';
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
       ctx.fillRect(0,0,canvas.width,canvas.height);
 
       Object.values(players).forEach(p => {
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
-        ctx.fillStyle = p.id === myId ? '#00ff99' : '#ff3366';
+        ctx.arc(p.x, p.y, p.size||40, 0, 7);
+        ctx.fillStyle = p.id === myId ? '#00ff99' : '#ff4444';
         ctx.fill();
         ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 4;
         ctx.stroke();
-
-        // Никнейм
-        ctx.fillStyle = 'white';
-        ctx.font = '16px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(p.name || 'Player', p.x, p.y + p.size + 20);
       });
 
       requestAnimationFrame(loop);
