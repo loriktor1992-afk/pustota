@@ -15,9 +15,9 @@
 <body>
   <div id="ui">
     <button id="connect">TON Кошелёк</button><br>
-    <span id="status">Подключение...</span><br>
+    <span id="status">Готов!</span><br>
     Размер: <span id="size">50</span><br>
-    Игроков онлайн: <span id="online">0</span>
+    Очки: <span id="score">0</span>
   </div>
   <canvas id="game"></canvas>
 
@@ -28,76 +28,61 @@
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    let players = {};
-    let myId = null;
     let mySize = 50;
+    let score = 0;
+    let player = { x: canvas.width/2, y: canvas.height/2, size: mySize, color: '#00ff99' };
 
-    // TON Connect (кошелёк)
+    // TON Connect
     const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
       manifestUrl: 'https://loriktor1992-afk.github.io/pustota/manifest.json',
       buttonRootId: 'connect'
     });
 
-    // БЕСПЛАТНЫЙ РАБОЧИЙ СЕРВЕР WebSocket (2025, масштабируется до миллионов, как Hamster)
-    const ws = new WebSocket('wss://pustota-ws-server.glitch.me');  // Готовый сервер, работает сейчас!
-
-    ws.onopen = () => {
-      document.getElementById('status').textContent = 'В бою!';
-    };
-
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'init') {
-        myId = data.id;
-      }
-      if (data.type === 'update') {
-        players = data.players;
-        document.getElementById('online').textContent = Object.keys(players).length;
-        if (players[myId]) mySize = players[myId].size;
-        document.getElementById('size').textContent = Math.floor(mySize);
-      }
-    };
-
-    ws.onerror = () => {
-      document.getElementById('status').textContent = 'Ошибка связи — перезагрузи';
-    };
-
-    // Движение
+    // Локальное движение (шарик всегда виден)
     canvas.addEventListener('pointermove', (e) => {
-      if (myId) {
-        ws.send(JSON.stringify({
-          type: 'move',
-          x: e.clientX,
-          y: e.clientY
-        }));
-      }
+      player.x = e.clientX;
+      player.y = e.clientY;
+      score += 1;  // Очки за движение
+      document.getElementById('score').textContent = score;
+      if (score % 100 === 0) mySize += 1;  // Рост за очки
+      player.size = mySize;
+      document.getElementById('size').textContent = mySize;
     });
 
-    // Анимация арены
+    // Анимация (шарик всегда рисуется)
     function loop() {
       ctx.fillStyle = 'rgba(0,0,0,0.1)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Рисуем игроков
-      Object.values(players).forEach((p) => {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size || 40, 0, Math.PI * 2);
-        ctx.fillStyle = p.id === myId ? '#00ff99' : '#ff3366';  // Твой — зелёный, чужие — красные
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+      // Рисуем шарик
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
+      ctx.fillStyle = player.color;
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
 
-        // Ник
-        ctx.fillStyle = 'white';
-        ctx.font = '14px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(p.name || 'Игрок', p.x, p.y - p.size - 10);
-      });
+      // Тени/эффекты
+      ctx.fillStyle = 'white';
+      ctx.font = '20px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('PUSTOTA', canvas.width/2, canvas.height - 30);
 
       requestAnimationFrame(loop);
     }
     loop();
+
+    // Простой "PvP-симулятор" (для теста — случайные "враги")
+    setInterval(() => {
+      if (Math.random() < 0.01) {
+        score += 10;  // "Съел врага"
+        mySize += 5;
+        player.size = mySize;
+        document.getElementById('size').textContent = mySize;
+        document.getElementById('score').textContent = score;
+      }
+    }, 1000);
   </script>
 </body>
 </html>
