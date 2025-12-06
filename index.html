@@ -5,38 +5,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PUSTOTA</title>
   <style>
-    body { margin:0; background:#111; overflow:hidden; touch-action:none; font-family:sans-serif; color:#fff; }
+    body { margin:0; background:#000; overflow:hidden; touch-action:none; font-family:sans-serif; color:#fff; }
     canvas { display:block; }
     #ui { position:absolute; top:15px; left:15px; z-index:10; background:rgba(0,0,0,0.8); padding:15px; border-radius:15px; font-size:14px; }
+    button { background:#00ff99; color:#000; border:none; padding:8px 16px; border-radius:20px; font-weight:bold; margin:2px; font-size:12px; }
   </style>
 </head>
 <body>
   <div id="ui">
-    Масса: <span id="mass">10</span>л<br>
+    Масса: <span id="mass">10</span>кг<br>
     Размер: <span id="radius">20</span>px<br>
-    Скорость: <span id="speed">1.0</span>
+    Скорость: <span id="speed">1.0</span><br>
+    XP: <span id="xp">0</span>/100 (Уровень: <span id="level">1</span>)<br>
+    <button id="toggleBorders">Borders</button>
+    <button id="boost">Boost</button>
   </div>
   <canvas id="game"></canvas>
 
+  <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
   <script>
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    // Футбольное поле ~105x68м, масштаб 1м = 10px → поле 1050x680px, центр на экране
+    // Поле (футбольное, тёмное void)
     const FIELD_WIDTH = 1050;
     const FIELD_HEIGHT = 680;
     const FIELD_X = (canvas.width - FIELD_WIDTH) / 2;
     const FIELD_Y = (canvas.height - FIELD_HEIGHT) / 2;
+    let showBorders = true;
 
-    // Физика
-    const DENSITY = 1;  // 1л = 1 кг
     const PI = Math.PI;
 
     function massToRadius(mass) {
-      // V = 4/3 π r^3 = mass
-      return Math.cbrt((3 * mass) / (4 * PI)) * 10;  // Масштаб: 10л = r~20px
+      return Math.cbrt((3 * mass) / (4 * PI)) * 10;  // 10кг = r~20px
     }
 
     function radiusToMass(radius) {
@@ -47,121 +50,111 @@
     let player = {
       x: FIELD_WIDTH / 2 + FIELD_X,
       y: FIELD_HEIGHT / 2 + FIELD_Y,
-      mass: 10,  // Футбольный мяч ~10л
+      mass: 10,
       vx: 0,
       vy: 0,
-      speed: 3.0  // Умеренная скорость
+      speed: 4.0,  // Умеренная
+      xp: 0,
+      level: 1
     };
     player.radius = massToRadius(player.mass);
 
-    // Корм (1л)
+    // Корм (белые точки, +1-5кг)
     let food = [];
     function spawnFood() {
+      const mass = 1 + Math.random() * 4;
       food.push({
         x: FIELD_X + Math.random() * FIELD_WIDTH,
         y: FIELD_Y + Math.random() * FIELD_HEIGHT,
-        mass: 1,
-        radius: massToRadius(1)
+        mass: mass,
+        radius: massToRadius(mass),
+        color: '#fff'
       });
     }
 
-    // Враги (случайная масса 1-5л)
+    // Враги (красные, полная масса)
     let enemies = [];
     function spawnEnemy() {
+      const mass = 1 + Math.random() * 10;
       enemies.push({
         x: FIELD_X + Math.random() * FIELD_WIDTH,
         y: FIELD_Y + Math.random() * FIELD_HEIGHT,
-        mass: 1 + Math.random() * 4,
+        mass: mass,
         vx: (Math.random() - 0.5) * 2,
         vy: (Math.random() - 0.5) * 2,
-        speed: 2.5
+        speed: 3.0,
+        color: '#ff3366'
       });
     }
 
-    // Спавн начальный
-    for (let i = 0; i < 50; i++) spawnFood();
-    for (let i = 0; i < 10; i++) spawnEnemy();
+    // Начальный спавн
+    for (let i = 0; i < 30; i++) spawnFood();
+    for (let i = 0; i < 8; i++) spawnEnemy();
 
-    // Джойстик (левый нижний угол)
-    let joystick = {
-      active: false,
-      x: 100,
-      y: canvas.height - 150,
-      r: 60,
-      dx: 0,
-      dy: 0
-    };
-
+    // Touch-drag (как в VOID, палец тянет)
+    let touchId = null;
     canvas.addEventListener('touchstart', e => {
       e.preventDefault();
-      const touch = e.touches[0];
-      const rect = canvas.getBoundingClientRect();
-      const tx = touch.clientX - rect.left;
-      const ty = touch.clientY - rect.top;
-      const dist = Math.sqrt((tx - joystick.x)**2 + (ty - joystick.y)**2);
-      if (dist < joystick.r) {
-        joystick.active = true;
-      }
+      touchId = e.changedTouches[0].identifier;
     });
 
     canvas.addEventListener('touchmove', e => {
       e.preventDefault();
-      if (!joystick.active) return;
-      const touch = e.touches[0];
-      const rect = canvas.getBoundingClientRect();
-      const tx = touch.clientX - rect.left;
-      const ty = touch.clientY - rect.top;
-      joystick.dx = (tx - joystick.x) / joystick.r;
-      joystick.dy = (ty - joystick.y) / joystick.r;
-      const mag = Math.sqrt(joystick.dx**2 + joystick.dy**2);
-      if (mag > 1) {
-        joystick.dx /= mag;
-        joystick.dy /= mag;
+      for (let touch of e.changedTouches) {
+        if (touch.identifier === touchId) {
+          player.vx = (touch.clientX - player.x) * 0.1;
+          player.vy = (touch.clientY - player.y) * 0.1;
+        }
       }
     });
 
     canvas.addEventListener('touchend', e => {
       e.preventDefault();
-      joystick.active = false;
-      joystick.dx = 0;
-      joystick.dy = 0;
-    });
-
-    // Мышь для ПК
-    let mouseDown = false;
-    canvas.addEventListener('mousedown', () => mouseDown = true);
-    canvas.addEventListener('mouseup', () => mouseDown = false);
-    canvas.addEventListener('mousemove', e => {
-      if (mouseDown) {
-        const rect = canvas.getBoundingClientRect();
-        const tx = e.clientX - rect.left;
-        const ty = e.clientY - rect.top;
-        joystick.dx = (tx - joystick.x) / joystick.r;
-        joystick.dy = (ty - joystick.y) / joystick.r;
-        const mag = Math.sqrt(joystick.dx**2 + joystick.dy**2);
-        if (mag > 1) {
-          joystick.dx /= mag;
-          joystick.dy /= mag;
+      for (let touch of e.changedTouches) {
+        if (touch.identifier === touchId) {
+          touchId = null;
+          player.vx *= 0.8;  // Инерция
+          player.vy *= 0.8;
         }
       }
     });
 
-    // Обновление позиции игрока
+    // Мышь (ПК)
+    canvas.addEventListener('mousemove', e => {
+      player.vx = (e.clientX - player.x) * 0.1;
+      player.vy = (e.clientY - player.y) * 0.1;
+    });
+
+    // Split (2 пальца)
+    canvas.addEventListener('touchstart', e => {
+      if (e.touches.length >= 2 && player.mass > 20) {
+        // Split stub: создай маленький шарик
+        const splitMass = player.mass / 2;
+        player.mass = splitMass;
+        player.radius = massToRadius(splitMass);
+        player.xp += 10;  // XP за split
+      }
+    });
+
+    // Обновление
     function updatePlayer() {
-      player.vx = joystick.dx * player.speed;
-      player.vy = joystick.dy * player.speed;
       player.x += player.vx;
       player.y += player.vy;
+      player.vx *= 0.9;  // Торможение
+      player.vy *= 0.9;
 
-      // Границы поля
+      // Границы
       player.x = Math.max(player.radius, Math.min(FIELD_WIDTH - player.radius + FIELD_X, player.x));
       player.y = Math.max(player.radius, Math.min(FIELD_HEIGHT - player.radius + FIELD_Y, player.y));
 
-      // Скорость обратно пропорциональна массе (как в Agar.io)
+      // Скорость от массы
       player.speed = 4.0 / (1 + player.mass / 50);
+      if (player.xp >= player.level * 100) {
+        player.level += 1;
+        player.xp = 0;
+      }
     }
 
-    // Коллизии
     function checkCollisions() {
       // Корм
       for (let i = food.length - 1; i >= 0; i--) {
@@ -170,6 +163,7 @@
         if (dist < player.radius + f.radius) {
           player.mass += f.mass;
           player.radius = massToRadius(player.mass);
+          player.xp += f.mass * 5;
           food.splice(i, 1);
         }
       }
@@ -181,33 +175,53 @@
         const dist = Math.sqrt((player.x - enemy.x)**2 + (player.y - enemy.y)**2);
         if (dist < player.radius + enemy.radius) {
           if (player.mass > enemy.mass * 1.1) {
-            // Съел врага полностью
-            player.mass += enemy.mass;
+            player.mass += enemy.mass;  // Полная масса
             player.radius = massToRadius(player.mass);
+            player.xp += enemy.mass * 10;
             enemies.splice(i, 1);
+            // Вспышка
+            ctx.fillStyle = '#ffdd00';
+            ctx.beginPath();
+            ctx.arc(enemy.x, enemy.y, enemy.radius * 2, 0, 2 * PI);
+            ctx.fill();
           } else if (enemy.mass > player.mass * 1.1) {
-            // Враг съел тебя (respawn)
+            // Respawn
             player.mass = 10;
             player.radius = massToRadius(10);
             player.x = FIELD_WIDTH / 2 + FIELD_X;
             player.y = FIELD_HEIGHT / 2 + FIELD_Y;
+            player.xp -= 50;
           }
         }
       }
     }
 
     // Спавн
-    setInterval(spawnFood, 2000);  // Корм каждые 2 сек
-    setInterval(spawnEnemy, 5000);  // Враг каждые 5 сек
+    setInterval(spawnFood, 1500);  // Корм
+    setInterval(spawnEnemy, 4000);  // Враги
+
+    function updateUI() {
+      document.getElementById('mass').textContent = Math.floor(player.mass);
+      document.getElementById('radius').textContent = Math.floor(player.radius);
+      document.getElementById('speed').textContent = player.speed.toFixed(1);
+      document.getElementById('xp').textContent = player.xp;
+      document.getElementById('level').textContent = player.level;
+    }
 
     // Анимация
     function loop() {
       updatePlayer();
       checkCollisions();
+      updateUI();
 
-      // Фон поля
-      ctx.fillStyle = '#228B22';
-      ctx.fillRect(FIELD_X, FIELD_Y, FIELD_WIDTH, FIELD_HEIGHT);
+      // Фон (тёмный void)
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Поле
+      ctx.strokeStyle = showBorders ? '#fff' : 'transparent';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(FIELD_X, FIELD_Y, FIELD_WIDTH, FIELD_HEIGHT);
 
       // Игрок
       ctx.beginPath();
@@ -218,49 +232,37 @@
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      // Джойстик
-      ctx.save();
-      ctx.translate(joystick.x, joystick.y);
-      ctx.beginPath();
-      ctx.arc(0, 0, joystick.r, 0, 2 * PI);
-      ctx.fillStyle = 'rgba(255,255,255,0.2)';
-      ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(joystick.dx * joystick.r * 0.6, joystick.dy * joystick.r * 0.6, joystick.r * 0.4, 0, 2 * PI);
-      ctx.fillStyle = '#00ff99';
-      ctx.fill();
-      ctx.restore();
-
-      // Корм (жёлтые точки)
-      ctx.fillStyle = '#ffdd00';
+      // Корм
       food.forEach(f => {
         ctx.beginPath();
         ctx.arc(f.x, f.y, f.radius, 0, 2 * PI);
+        ctx.fillStyle = f.color || '#fff';
         ctx.fill();
       });
 
-      // Враги (красные)
-      ctx.fillStyle = '#ff4444';
+      // Враги
       enemies.forEach(enemy => {
         ctx.beginPath();
         ctx.arc(enemy.x, enemy.y, enemy.radius, 0, 2 * PI);
+        ctx.fillStyle = enemy.color;
         ctx.fill();
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 1;
         ctx.stroke();
       });
 
-      // UI
-      document.getElementById('mass').textContent = Math.floor(player.mass);
-      document.getElementById('radius').textContent = Math.floor(player.radius);
-      document.getElementById('speed').textContent = player.speed.toFixed(1);
-
       requestAnimationFrame(loop);
     }
     loop();
+
+    // Кнопки
+    document.getElementById('toggleBorders').onclick = () => showBorders = !showBorders;
+    document.getElementById('boost').onclick = () => {
+      if (player.mass > 20) {
+        player.speed *= 1.5;  // Boost на 5 сек
+        setTimeout(() => player.speed /= 1.5, 5000);
+      }
+    };
   </script>
 </body>
 </html>
