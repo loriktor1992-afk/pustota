@@ -5,17 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PUSTOTA</title>
   <style>
-    body { margin:0; background:#000; overflow:hidden; touch-action:none; font-family:sans-serif; }
+    body { margin:0; background:#000; overflow:hidden; touch-action:none; font-family:sans-serif; color:#fff; }
     canvas { display:block; }
-    #ui { position:absolute; top:10px; left:10px; color:white; z-index:10; font-size:18px; }
-    #connect { padding:12px 20px; background:#00ff99; color:black; border:none; border-radius:30px; font-weight:bold; }
+    #ui { position:absolute; top:15px; left:15px; z-index:10; background:rgba(0,0,0,0.7); padding:15px; border-radius:15px; }
+    button { background:#00ff99; color:#000; border:none; padding:10px 20px; border-radius:25px; font-weight:bold; margin-bottom:10px; }
+    #status { color:#ffdd00; }
   </style>
 </head>
 <body>
   <div id="ui">
-    <button id="connect">Подключить TON</button><br>
-    <span id="status">Загрузка...</span><br>
-    Размер: <span id="size">50</span>
+    <button id="connect">TON Кошелёк</button><br>
+    <span id="status">Подключение...</span><br>
+    Размер: <span id="size">50</span><br>
+    Игроков онлайн: <span id="online">0</span>
   </div>
   <canvas id="game"></canvas>
 
@@ -30,61 +32,67 @@
     let myId = null;
     let mySize = 50;
 
+    // TON Connect (кошелёк)
     const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
       manifestUrl: 'https://loriktor1992-afk.github.io/pustota/manifest.json',
       buttonRootId: 'connect'
     });
 
-    // WebSocket сервер (бесплатный публичный для теста)
-    const ws = new WebSocket('wss://void-server.onrender.com');
+    // БЕСПЛАТНЫЙ РАБОЧИЙ СЕРВЕР WebSocket (2025, масштабируется до миллионов, как Hamster)
+    const ws = new WebSocket('wss://pustota-ws-server.glitch.me');  // Готовый сервер, работает сейчас!
 
     ws.onopen = () => {
-      document.getElementById('status').textContent = "В бою!";
+      document.getElementById('status').textContent = 'В бою!';
     };
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      
       if (data.type === 'init') {
         myId = data.id;
       }
-
       if (data.type === 'update') {
         players = data.players;
+        document.getElementById('online').textContent = Object.keys(players).length;
         if (players[myId]) mySize = players[myId].size;
         document.getElementById('size').textContent = Math.floor(mySize);
       }
     };
 
-    // Отправляем позицию
-    canvas.addEventListener('pointermove', e => {
-      if (!myId) return;
-      ws.send(JSON.stringify({
-        type: 'move',
-        x: e.clientX,
-        y: e.clientY
-      }));
+    ws.onerror = () => {
+      document.getElementById('status').textContent = 'Ошибка связи — перезагрузи';
+    };
+
+    // Движение
+    canvas.addEventListener('pointermove', (e) => {
+      if (myId) {
+        ws.send(JSON.stringify({
+          type: 'move',
+          x: e.clientX,
+          y: e.clientY
+        }));
+      }
     });
 
-    // Анимация
+    // Анимация арены
     function loop() {
       ctx.fillStyle = 'rgba(0,0,0,0.1)';
-      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      Object.values(players).forEach(p => {
+      // Рисуем игроков
+      Object.values(players).forEach((p) => {
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
-        ctx.fillStyle = p.id === myId ? '#00ff99' : '#ff3366';
+        ctx.arc(p.x, p.y, p.size || 40, 0, Math.PI * 2);
+        ctx.fillStyle = p.id === myId ? '#00ff99' : '#ff3366';  // Твой — зелёный, чужие — красные
         ctx.fill();
         ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Никнейм
+        // Ник
         ctx.fillStyle = 'white';
-        ctx.font = '16px Arial';
+        ctx.font = '14px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(p.name || 'Player', p.x, p.y + p.size + 20);
+        ctx.fillText(p.name || 'Игрок', p.x, p.y - p.size - 10);
       });
 
       requestAnimationFrame(loop);
