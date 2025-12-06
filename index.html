@@ -15,9 +15,10 @@
 <body>
   <div id="ui">
     <button id="connect">TON Кошелёк</button><br>
-    <span id="status">Готов!</span><br>
+    <span id="status">Арена готова!</span><br>
     Размер: <span id="size">50</span><br>
-    Очки: <span id="score">0</span>
+    Очки: <span id="score">0</span><br>
+    Врагов: <span id="enemies">5</span>
   </div>
   <canvas id="game"></canvas>
 
@@ -30,31 +31,42 @@
 
     let mySize = 50;
     let score = 0;
-    let player = { x: canvas.width/2, y: canvas.height/2, size: mySize, color: '#00ff99' };
+    let enemies = [];  // Массив врагов
 
-    // TON Connect
+    const player = { x: canvas.width/2, y: canvas.height/2, size: mySize, color: '#00ff99' };
+
+    // TON Connect (пока не трогаем)
     const tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
       manifestUrl: 'https://loriktor1992-afk.github.io/pustota/manifest.json',
       buttonRootId: 'connect'
     });
 
-    // Локальное движение (шарик всегда виден)
+    // Создаём врагов (5 штук, случайные позиции)
+    for (let i = 0; i < 5; i++) {
+      enemies.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() * 30 + 20,
+        color: '#ff3366',
+        dx: (Math.random() - 0.5) * 2,  // Случайное движение
+        dy: (Math.random() - 0.5) * 2
+      });
+    }
+
+    // Движение игрока
     canvas.addEventListener('pointermove', (e) => {
       player.x = e.clientX;
       player.y = e.clientY;
       score += 1;  // Очки за движение
       document.getElementById('score').textContent = score;
-      if (score % 100 === 0) mySize += 1;  // Рост за очки
-      player.size = mySize;
-      document.getElementById('size').textContent = mySize;
     });
 
-    // Анимация (шарик всегда рисуется)
+    // Анимация + PvP-логика
     function loop() {
       ctx.fillStyle = 'rgba(0,0,0,0.1)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Рисуем шарик
+      // Рисуем игрока
       ctx.beginPath();
       ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
       ctx.fillStyle = player.color;
@@ -63,26 +75,57 @@
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      // Тени/эффекты
-      ctx.fillStyle = 'white';
-      ctx.font = '20px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText('PUSTOTA', canvas.width/2, canvas.height - 30);
+      // Рисуем и двигаем врагов
+      enemies.forEach((enemy, index) => {
+        // Случайное движение врагов
+        enemy.x += enemy.dx;
+        enemy.y += enemy.dy;
+        if (enemy.x < 0 || enemy.x > canvas.width) enemy.dx *= -1;
+        if (enemy.y < 0 || enemy.y > canvas.height) enemy.dy *= -1;
+
+        ctx.beginPath();
+        ctx.arc(enemy.x, enemy.y, enemy.size, 0, Math.PI * 2);
+        ctx.fillStyle = enemy.color;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // PvP: столкновение
+        const dist = Math.sqrt((player.x - enemy.x)**2 + (player.y - enemy.y)**2);
+        if (dist < player.size + enemy.size) {
+          if (player.size > enemy.size * 1.1) {
+            // Ты съел врага
+            player.size += enemy.size * 0.5;
+            score += 100;
+            enemies.splice(index, 1);  // Удаляем врага
+            document.getElementById('enemies').textContent = enemies.length;
+          } else {
+            // Враг съел тебя
+            player.size -= enemy.size * 0.3;
+            score -= 50;
+          }
+          player.size = Math.max(10, player.size);  // Мин размер
+          document.getElementById('size').textContent = Math.floor(player.size);
+          document.getElementById('score').textContent = score;
+        }
+      });
+
+      // Если врагов мало — спавним новых
+      if (enemies.length < 3) {
+        enemies.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          size: Math.random() * 30 + 20,
+          color: '#ff3366',
+          dx: (Math.random() - 0.5) * 2,
+          dy: (Math.random() - 0.5) * 2
+        });
+      }
 
       requestAnimationFrame(loop);
     }
     loop();
-
-    // Простой "PvP-симулятор" (для теста — случайные "враги")
-    setInterval(() => {
-      if (Math.random() < 0.01) {
-        score += 10;  // "Съел врага"
-        mySize += 5;
-        player.size = mySize;
-        document.getElementById('size').textContent = mySize;
-        document.getElementById('score').textContent = score;
-      }
-    }, 1000);
   </script>
 </body>
 </html>
